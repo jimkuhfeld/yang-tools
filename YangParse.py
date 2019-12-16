@@ -6,6 +6,7 @@ from GeneralTreeNode import GeneralTreeNode
 from GeneralTreeToYin import GeneralTreeToYin
 from DebugLog import DebugLog
 from ArgcArgvProcess import ArgcArgvProcess
+from YangImport import YangImport
 
 class YangParse:
 
@@ -14,6 +15,12 @@ class YangParse:
 
     def commentSingleLineFunc(self, node):
         self.debug.debugPrint("commentSingleLine ")
+
+    def moduleFunc(self, node):
+        if (self.argvtest.t14Get()):
+            self.yinParse.yinModuleSet(self.yangimport.getYinModuleStringWithImports())
+        else:
+            self.yinParse.yinTwoParamWithBracePairSet(node.data[1].group(1), node.data[1].group(2))
 
     def yangSemicolonFunc(self, node):
         self.debug.debugPrint("semicolon ")
@@ -29,20 +36,48 @@ class YangParse:
     def whitespaceFunc(self, node):
         self.debug.debugPrint("whitespace ")
 
+    def complexStringConcatenate(self, input):
+        print("complexStringConcatenate:" + input)
+        stringlen = len(input)
+        index = 0
+        result = ''
+        while (index < stringlen):
+            matchy = self.testreSearch(input[index:], r'\"(.*?)\"', re.DOTALL)
+            if (matchy != None):
+                result = result + matchy.group(1)
+                print("partial result:" + result)
+                index += matchy.end()
+            else:
+                result = result + '\"'
+                break
+        print("complexStringConcatenate final result:" + result)
+        return result
+
+    def complexStringCheck(self, input):
+        complex = re.search('"\s+\+\s+"', input)
+        if (complex):
+            lengthComplex = len(input)
+            if ((lengthComplex > 2) and (input[0] != '"') and (input[(lengthComplex - 1)] != '"')):
+                input = '"' + input + '"'
+            print("COMPLEX:", input)
+            return self.complexStringConcatenate(input)
+        else:
+            return input
+
     def textFunc(self, node):
         self.debug.debugPrint("text ")
-        self.yinParse.yinTextSet(node.data[1].group(1), node.data[1].group(2))
+        self.yinParse.yinTextSet(node.data[1].group(1), self.complexStringCheck(node.data[1].group(2)))
 
     def twoParamWithBraceFunc(self, node):
         self.debug.debugPrint("two params with brace ")
-        self.yinParse.yinTwoParamWithBracePairSet(node.data[1].group(1), node.data[1].group(2))
+        self.yinParse.yinTwoParamWithBracePairSet(node.data[1].group(1), self.complexStringCheck(node.data[1].group(2)))
 
     def oneParamWithBraceFunc(self, node):
         self.yinParse.yinOneParamWithBracePairSet(node.data[1].group(1))
 
     def twoParamWithSemicolon(self, node):
         self.debug.debugPrint("two params with semicolon ")
-        self.yinParse.yinTwoParamsWithSemicolonSet(node.data[1].group(1), node.data[1].group(2))
+        self.yinParse.yinTwoParamsWithSemicolonSet(node.data[1].group(1), self.complexStringCheck(node.data[1].group(2)))
 
     def testreSearch(self, stringToParse, regExString, flags):
         self.debug.debugPrint("\nBegin testreSearch string to parse: ", stringToParse, " regular expression: ", regExString)
@@ -81,6 +116,7 @@ class YangParse:
         self.yinParse.yinTwoParamsWithSemicolonSet(node.data[1].group(1)+node.data[1].group(2)+node.data[1].group(3), node.data[1].group(4))
 
     def __init__(self, argvtest):
+        self.argvtest = argvtest
         self.debug = DebugLog(argvtest.debugFileGet())
         self.yinParse = GeneralTreeToYin(self.debug, argvtest)
 
@@ -89,7 +125,7 @@ class YangParse:
                           (r';', 0, self.yangSemicolonFunc, 0),
                           (r'({)', 0, self.unhandledReError, 1),
                           (r'}', 0, self.yangBraceCloseFunc, -1),
-                          (r'(module)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
+                          (r'(module)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.moduleFunc, 1),
                           (r'\s+', 0, self.whitespaceFunc, 0),
                           (r'(namespace)\s+(\".*?\");', 0, self.twoParamWithSemicolon, 0),
                           (r'(import)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
@@ -103,7 +139,7 @@ class YangParse:
                           (r'(leaf-list)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
                           (r'(choice)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
                           (r'(case)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(enum)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
+                          (r'(enum)\s+(.*?)\s+{', 0, self.twoParamWithBraceFunc, 1),
                           (r'(enum)\s+"(.*?)";',  0, self.twoParamWithSemicolon, 0),
                           (r'(enum)\s+(.*?);',  0, self.twoParamWithSemicolon, 0),
                           (r'(notification)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
@@ -132,7 +168,7 @@ class YangParse:
                           (r'(uses)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
                           (r'(mandatory)\s+(.*?);',  0, self.twoParamWithSemicolon, 0),
                           (r'(base)\s+(.*?);',  0, self.twoParamWithSemicolon, 0),
-                          (r'(path)\s+(\".*?\");',  0, self.twoParamWithSemicolon, 0),
+                          (r'(path)\s+(\".*?\");',  re.DOTALL, self.twoParamWithSemicolon, 0),
                           (r'(min-elements)\s+(\d*);', 0, self.twoParamWithSemicolon, 0),
                           (r'(augment)\s+(\".*?\")\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
                           (r'(input)\s+{',  re.DOTALL, self.oneParamWithBraceFunc, 1),
@@ -148,6 +184,37 @@ class YangParse:
                           (r'(pattern)\s+\"(.*?)\";', re.DOTALL, self.twoParamWithSemicolon, 0),
                           (r'(pattern)\s+(\'.*?\');', re.DOTALL, self.patternComplex, 0),
                           (r'([_A-Za-z][._\-A-Za-z0-9]*)(:)([_A-Za-z][._\-A-Za-z0-9]*)\s+(\".*?\")', 0, self.prefixExtensionFunc, 0),
+                          (r'(action)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
+                          (r'(action)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(anydata)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
+                          (r'(anydata)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(argument)\s+\"(.*?)\"\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
+                          (r'(argument)\s+\"(.*?)\";',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(belongs-to)\s+\"(.*?)\"\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
+                          (r'(deviate)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
+                          (r'(deviate)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(deviation)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
+                          (r'(deviation)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(error-app-tag)\s+\"(.*?)\";',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(submodule)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
+                          (r'(error-message)\s+\"(.*?)\";',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(extension)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
+                          (r'(fraction-digits)\s+(.*?);',  re.DOTALL, self.textFunc, 0),
+                          (r'(include)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
+                          (r'(include)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(max-elements)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(modifier)\s+(invert-match);',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(must)\s+\"(.*?)\"\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
+                          (r'(must)\s+\"(.*?)\";',  re.DOTALL, self.textFunc, 0),
+                          (r'(must)\s+\'(.*?)\';',  re.DOTALL, self.textFunc, 0),
+                          (r'(ordered-by)\s+\"(system|user)\";',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(refine)\s+\"(.*?)\"\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
+                          (r'(require-instance)\s+\"(true|false)\";',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(revision-date)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(unique)\s+\"(.*?)\";',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(when)\s+(\".*?\");',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(yang-version)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
+                          (r'(yin-element)\s+\"(true|false)\";',  re.DOTALL, self.twoParamWithSemicolon, 0),
                           (r"([_A-Za-z][._\-A-Za-z0-9]*)", 0, self.unhandledReError, 0)
                          ]
         """
@@ -178,12 +245,14 @@ class YangParse:
         self.handleinputfile = io.open(self.inputFile, "r", encoding="utf-8")
         self.handleoutputfile = io.open(self.outputFile, "w", encoding="utf-8")
         self.inputfilecontents = self.handleinputfile.read()
+        self.handleinputfile.close()
+
+        self.yangimport = YangImport(self.inputfilecontents, argvtest.yangDirsGet())
         self.levelIndent = "                                                                                                                                                                                                "
         self.levelIndentLen = len(self.levelIndent)
         self.root = None
 
     def __del__(self):
-        self.handleinputfile.close()
         self.handleoutputfile.close()
 
     def levelIndentPrint(self, treeLevel):

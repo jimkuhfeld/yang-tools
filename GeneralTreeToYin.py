@@ -2,7 +2,7 @@ import sys
 from collections import deque
 from DebugLog import DebugLog
 from LevelIndent import LevelIndent
-from TextTag import TextTag
+from TagPairs import TagPairs
 import re
 
 class GeneralTreeToYin:
@@ -11,9 +11,8 @@ class GeneralTreeToYin:
         self.debug = debug
         self.level = LevelIndent(2, self.debug)
         self.yinState = None
-        self.yinString = None
         self.lifo = deque()
-        self.yinspec = TextTag(argvtest.fixyinFileGet())
+        self.tagpairs = TagPairs(argvtest.fixyinFileGet())
         self.t1 = argvtest.t1Get()
         self.t2 = argvtest.t2Get()
         self.t3 = argvtest.t3Get()
@@ -27,7 +26,18 @@ class GeneralTreeToYin:
         self.t11 = argvtest.t11Get()
         self.t12 = argvtest.t12Get()
         self.t13 = argvtest.t13Get()
+        self.t14 = argvtest.t14Get()
+        self.t15 = argvtest.t15Get()
+        self.t16 = argvtest.t16Get()
+        self.t17 = argvtest.t17Get()
+        self.t18 = argvtest.t18Get()
+        self.t19 = argvtest.t19Get()
         self.crlfRe = re.compile('\n', re.DOTALL)
+        if (self.t13 == False):
+            self.yinString = None
+        else:
+            self.yinString = '<?xml version="1.0" encoding="UTF-8"?>\n'
+
 
     def addQuote(self, param):
         length = len(param)
@@ -118,15 +128,14 @@ class GeneralTreeToYin:
 
     def yinTwoParamWithBracePairSet(self, param1, param2):
         self.debug.debugPrint("yinTwoParamWithBracePairSet ", param1, " ", param2)
-        middle = 'name'
-        if param1 == 'revision':
-            middle = 'date'
-        elif (param1 == 'import'):
-            middle = 'module'
-        elif (param1 == 'augment'):
-            middle = 'target-node'
-        self.yinStringAppend('<' + param1 + ' ' + middle + '=' + self.addQuote(param2) + '>\n')
+        inner = self.tagpairs.getInnerTag(param1)
+        self.yinStringAppend('<' + param1 + ' ' + inner + '=' + self.addQuote(param2) + '>\n')
         self.yinStackPush('</' + param1 + '>')
+
+    def yinModuleSet(self, moduleString):
+        self.debug.debugPrint("yinModuleSet", moduleString)
+        self.yinStringAppend(moduleString)
+        self.yinStackPush('</module>')
 
     def yinOneParamWithBracePairSet(self, param1):
         self.debug.debugPrint("yinTwoParamWithBracePairSet ", param1)
@@ -135,13 +144,8 @@ class GeneralTreeToYin:
 
     def yinTwoParamsWithSemicolonSet(self, param1, param2):
         self.debug.debugPrint("yinTwoParamsWithSemicolonSet")
-        middle = 'name'
-        if ((param1 == 'path') or (param1 == 'mandatory') or (param1 == 'config') or (param1 == 'value') or (param1 == 'range') or (param1 == 'default') or (param1 == 'prefix')  
-            or (param1 == 'length') or (param1 == 'pattern') or (param1 == 'status') or (param1 == 'position') or (param1 == 'min-elements')):
-             middle = 'value'
-        elif (param1 == 'namespace'):
-             middle = 'uri'
-        self.yinStringAppend('<' + param1 + ' ' + middle + '=' + self.addQuote(param2) + '/>\n')
+        inner = self.tagpairs.getInnerTag(param1)
+        self.yinStringAppend('<' + param1 + ' ' + inner + '=' + self.addQuote(param2) + '/>\n')
 
     def yinTextSet(self, type, description):
         self.debug.debugPrint("input yang text field:" + description)
@@ -150,7 +154,7 @@ class GeneralTreeToYin:
             working = '<' + type + '>\n' 
             self.yinStringAppend(working)
             self.level.incrementLevel()
-            nextchunk = '<' + self.yinspec.getText(type) + '/>\n'
+            nextchunk = '<' + self.tagpairs.getInnerTag(type) + '/>\n'
             working += nextchunk
             self.yinStringAppend(nextchunk)
             self.level.decrementLevel()
@@ -164,10 +168,10 @@ class GeneralTreeToYin:
             working = '<' + type + '>\n' 
             self.yinStringAppend(working)
             self.level.incrementLevel()
-            nextchunk = '<' + self.yinspec.getText(type) + '>'
+            nextchunk = '<' + self.tagpairs.getInnerTag(type) + '>'
             working += nextchunk
             self.yinStringAppend(nextchunk)
-            nextchunk = self.xmlSubstitution(description) + '</' + self.yinspec.getText(type) + '>\n'
+            nextchunk = self.xmlSubstitution(description) + '</' + self.tagpairs.getInnerTag(type) + '>\n'
             self.yinStringAppend(nextchunk)
             working += nextchunk
             self.level.decrementLevel()
@@ -178,14 +182,26 @@ class GeneralTreeToYin:
             return
 
         if (self.t8 and (type == 'reference')):
-            working = '<' + type + ' ' + self.yinspec.getText(type) + '="' + self.xmlSubstitution(description) + '"/>\n'
+            working = '<' + type + ' ' + self.tagpairs.getInnerTag(type) + '="' + self.xmlSubstitution(description) + '"/>\n'
             self.debug.debugPrint("yinTextSet t8:" + working)
             self.yinStringAppend(working)
             return
 
         if (self.t11 and (type == 'presence')):
-            working = '<' + type + ' ' + self.yinspec.getText(type) + '="' + self.xmlSubstitution(description) + '"/>\n'
+            working = '<' + type + ' ' + self.tagpairs.getInnerTag(type) + '="' + self.xmlSubstitution(description) + '"/>\n'
             self.debug.debugPrint("yinTextSet t11:" + working)
+            self.yinStringAppend(working)
+            return
+
+        if (self.t15 and (type == 'fraction-digits')):
+            working = '<' + type + ' ' + self.tagpairs.getInnerTag(type) + '="' + self.xmlSubstitution(description) + '"/>\n'
+            self.debug.debugPrint("yinTextSet t15:" + working)
+            self.yinStringAppend(working)
+            return
+
+        if (self.t16 and (type == 'must')):
+            working = '<' + type + ' ' + self.tagpairs.getInnerTag(type) + '="' + self.xmlSubstitution(description) + '"/>\n'
+            self.debug.debugPrint("yinTextSet t16:" + working)
             self.yinStringAppend(working)
             return
 
@@ -194,10 +210,10 @@ class GeneralTreeToYin:
             working = '<' + type + '>\n' 
             self.yinStringAppend(working)
             self.level.incrementLevel()
-            nextchunk = '<' + self.yinspec.getText(type) + '>'
+            nextchunk = '<' + self.tagpairs.getInnerTag(type) + '>'
             working += nextchunk
             self.yinStringAppend(nextchunk)
-            nextchunk = self.xmlSubstitution(description) + '</' + self.yinspec.getText(type) + '>\n'
+            nextchunk = self.xmlSubstitution(description) + '</' + self.tagpairs.getInnerTag(type) + '>\n'
             self.yinStringAppend(nextchunk)
             working += nextchunk
             self.level.decrementLevel()
@@ -211,7 +227,7 @@ class GeneralTreeToYin:
             working = '<' + type + '>\n' 
             self.yinStringAppend(working)
             self.level.incrementLevel()
-            nextchunk = '<' + self.yinspec.getText(type) + '>'
+            nextchunk = '<' + self.tagpairs.getInnerTag(type) + '>'
             working += nextchunk
             self.yinStringAppend(nextchunk)
             nextchunk = '\n'
@@ -223,7 +239,7 @@ class GeneralTreeToYin:
             nextchunk = '\n'
             working += nextchunk
             self.yinStringAppend(nextchunk)
-            nextchunk = '</' + self.yinspec.getText(type) + '>\n'
+            nextchunk = '</' + self.tagpairs.getInnerTag(type) + '>\n'
             working += nextchunk
             self.yinStringAppend(nextchunk)
             self.level.decrementLevel()
@@ -238,13 +254,13 @@ class GeneralTreeToYin:
         working = '<' + type + '>\n' 
         self.yinStringAppend(working)
         self.level.incrementLevel()
-        nextchunk = '<' + self.yinspec.getText(type) + '>'
+        nextchunk = '<' + self.tagpairs.getInnerTag(type) + '>'
         working += nextchunk
         self.yinStringAppend(nextchunk)
         nextchunk = self.xmlSubstitution(description)
         working += nextchunk
         self.yinStringAppend(nextchunk)
-        nextchunk = '</' + self.yinspec.getText(type) + '>\n'
+        nextchunk = '</' + self.tagpairs.getInnerTag(type) + '>\n'
         working += nextchunk
         self.yinStringAppend(nextchunk)
         self.level.decrementLevel()

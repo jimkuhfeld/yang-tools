@@ -12,6 +12,8 @@ and optionally
 
 -fixyin=fixyin-file-path 
 
+-yd=yangdir1:yangdir2...
+
 -t1 single line text fields are done on a single line, e.g. <text>single line stuff</text>
 
 -t2 text field substitution where & is changed to &amp;
@@ -26,7 +28,7 @@ and optionally
 
 -t7 text field substitution of white space to a single space
 
--t8 <reference><info=text/> format, also presence
+-t8 <reference><info=text/> format,
 
 -t9 indent strings according to level in the yang tree, that is { count not yet closed by } 
 
@@ -38,7 +40,19 @@ and optionally
 
 The default case is no crlf is added before or after the text tag
 
--t13
+-t13 first yin line is always xml version
+
+-t14 module statement yin output includes imports
+
+-t15 <fraction-digits><info=text/> format,
+
+-t16 <must condition=  format
+
+-t17
+
+-t18
+
+-t19
 
 \n
 """
@@ -59,6 +73,22 @@ class ArgcArgvProcess:
     def fixyinFileSet(self, matchy):
         # print("ArgcArgvProcess.fixyinFileSet", matchy.group(1))
         self.fixyinFilePath = matchy.group(1)
+
+    def yangDirsSet(self, matchy):
+        path = (matchy.group(1))
+        pathlen = len(path)
+        if ((pathlen > 1) and (path[(pathlen-1)] != ':')):
+            path = path + ':'
+        # print("ArgcArgvProcess.yangDirsSet", path)
+        self.yangdirs = ['./']
+        pathelems = re.findall(r'(.*?):', path)
+        for path in pathelems:
+            length = len(path)
+            if (path[(length-1)] != '/'):
+                self.yangdirs.append((path + '/'))
+            else:
+                self.yangdirs.append(path)
+        # print("ArgcArgvProcess yangDirsSet final:", self.yangdirs)
 
     def t1Set(self, matchy):
         self.t1 = True
@@ -99,6 +129,24 @@ class ArgcArgvProcess:
     def t13Set(self, matchy):
         self.t13 = True
 
+    def t14Set(self, matchy):
+        self.t14 = True
+
+    def t15Set(self, matchy):
+        self.t15 = True
+
+    def t16Set(self, matchy):
+        self.t16 = True
+
+    def t17Set(self, matchy):
+        self.t17 = True
+
+    def t18Set(self, matchy):
+        self.t18 = True
+
+    def t19Set(self, matchy):
+        self.t19 = True
+
     def yangFileGet(self):
         return self.yangFilePath
 
@@ -110,6 +158,9 @@ class ArgcArgvProcess:
 
     def fixyinFileGet(self):
         return self.fixyinFilePath
+
+    def yangDirsGet(self):
+        return self.yangdirs
 
     def t1Get(self):
         return self.t1
@@ -150,6 +201,24 @@ class ArgcArgvProcess:
     def t13Get(self):
         return self.t13
 
+    def t14Get(self):
+        return self.t14
+
+    def t15Get(self):
+        return self.t15
+
+    def t16Get(self):
+        return self.t16
+
+    def t17Get(self):
+        return self.t17
+
+    def t18Get(self):
+        return self.t18
+
+    def t19Get(self):
+        return self.t19
+
     def argParse(self, arg):
         # print("ArgcArgvProcess.argParse(arg)", arg)
         for regularExpressionIndex in range(self.reCount):
@@ -165,10 +234,17 @@ class ArgcArgvProcess:
                           (r'-yinout=(.*)', self.yinoutFileSet),
                           (r'-dbg=(.*)', self.debugFileSet),
                           (r'-fixyin=(.*)', self.fixyinFileSet),
+                          (r'-yd=(.*)', self.yangDirsSet),
                           (r'-t10', self.t10Set),
                           (r'-t11', self.t11Set),
                           (r'-t12', self.t12Set),
                           (r'-t13', self.t13Set),
+                          (r'-t14', self.t14Set),
+                          (r'-t15', self.t15Set),
+                          (r'-t16', self.t16Set),
+                          (r'-t17', self.t17Set),
+                          (r'-t18', self.t18Set),
+                          (r'-t19', self.t19Set),
                           (r'-t1', self.t1Set),
                           (r'-t2', self.t2Set),
                           (r'-t3', self.t3Set),
@@ -184,6 +260,7 @@ class ArgcArgvProcess:
         self.yinoutFilePath  = None
         self.debugFilePath   = None
         self.fixyinFilePath  = None
+        self.yangdirs        = []
         self.t1              = False
         self.t2              = False
         self.t3              = False
@@ -197,6 +274,12 @@ class ArgcArgvProcess:
         self.t11             = False
         self.t12             = False
         self.t13             = False
+        self.t14             = False
+        self.t15             = False
+        self.t16             = False
+        self.t17             = False
+        self.t18             = False
+        self.t19             = False
 
         args = argv[1:]
         argc = len(args)
