@@ -5,232 +5,167 @@ import re
 from GeneralTreeNode import GeneralTreeNode
 from GeneralTreeToYin import GeneralTreeToYin
 from DebugLog import DebugLog
+from LevelIndent import LevelIndent
 from ArgcArgvProcess import ArgcArgvProcess
 from YangImport import YangImport
+from enum import Enum
+
+"""
+    The following will define a state machine
+
+    rfc 7950
+6.3.  Statements
+
+   A YANG module contains a sequence of statements.  Each statement
+   starts with a keyword, followed by zero or one argument, followed by
+   either a semicolon (";") or a block of substatements enclosed within
+   braces ("{ }"):
+
+     statement = keyword [argument] (";" / "{" *statement "}")
+
+   The argument is a string, as defined in Section 6.1.2.
+
+6.1.2.  Tokens
+
+   A token in YANG is either a keyword, a string, a semicolon (";"), or
+   braces ("{" or "}").  A string can be quoted or unquoted.  A keyword
+   is either one of the YANG keywords defined in this document, or a
+   prefix identifier, followed by a colon (":"), followed by a language
+   extension keyword.  Keywords are case sensitive.  See Section 6.2 for
+   a formal definition of identifiers.
+
+"""
+
+class KeywordType(Enum):
+    NONE       = 0
+    TEXT       = 1
+    ALLTHEREST = 2
+
+class StringStart(Enum):
+    NO           = 0 
+    QUOTESTART   = 1
+    NOQUOTESTART = 2
+
+class StatementState(Enum):
+    KEYWORD  = 1
+    ARGUMENT = 2
 
 class YangParse:
 
-    def commentFunc(self, node):
-        self.debug.debugPrint("comment ")
+    def commentFunc(self, matchy):
+        self.debug.debugPrint("YangParse, commentFunc", matchy.group(1))
 
-    def commentSingleLineFunc(self, node):
-        self.debug.debugPrint("commentSingleLine ")
+    def whitespaceFunc(self, matchy):
+        self.debug.debugPrint("YangParse, whitespaceFunc")
 
-    def moduleFunc(self, node):
-        if (self.argvtest.t14Get()):
-            self.yinParse.yinModuleSet(self.yangimport.getYinModuleStringWithImports())
-        else:
-            self.yinParse.yinTwoParamWithBracePairSet(node.data[1].group(1), node.data[1].group(2))
+    def semicolonFunc(self, matchy):
+        self.debug.debugPrint("YangParse, semicolonFunc")
+        self.debug.debugPrint(self.keyword, self.argument, ';')
+        data = (self.keyword, self.argument, ';', self.level, self.keywordtype)
+        # print("debug general tree insert", self.keyword, self.argument, ';', self.level, self.keywordtype)
+        node = GeneralTreeNode(data)
+        self.nodeCount += 1
+        self.parent.addGeneralTreeChildNode(node)
 
-    def yangSemicolonFunc(self, node):
-        self.debug.debugPrint("semicolon ")
+        self.keyword = None
+        self.argument = None
+        self.stringstart = StringStart.NO
+        self.keywordtype = KeywordType.NONE
+        self.statementstate = StatementState.KEYWORD
 
-    def unhandledReError(self, node):
-        self.debug.debugPrint("ERROR:", node.data[1].group(1), "not handled as part of a full statement")
-        sys.exit(1)
+    def openBraceFunc(self, matchy):
+        self.debug.debugPrint("YangParse, openBraceFunc")
+        if ((self.keyword != None) and (self.argument != None)):
+            self.debug.debugPrint(self.keyword, self.argument, '{')
+        data = (self.keyword, self.argument, '{', self.level, self.keywordtype)
+        # print("debug general tree insert", self.keyword, self.argument, '{', self.level, self.keywordtype)
+        node = GeneralTreeNode(data)
+        self.nodeCount += 1
+        self.parent.addGeneralTreeChildNode(node)
+        self.parent = node
+        self.level += 1
+        if (self.maxlevel < self.level):
+            self.maxlevel = self.level
 
-    def yangBraceCloseFunc(self, node):
-        self.debug.debugPrint("BraceClose ")
-        self.yinParse.yinCloseBraceSet()
+        self.keyword = None
+        self.argument = None
+        self.stringstart = StringStart.NO
+        self.keywordtype = KeywordType.NONE
+        self.statementstate = StatementState.KEYWORD
 
-    def whitespaceFunc(self, node):
-        self.debug.debugPrint("whitespace ")
+    def closeBraceFunc(self, matchy):
+        self.debug.debugPrint("YangParse, closeBraceFunc")
+        self.debug.debugPrint('}')
+        self.level -= 1
+        data = (None, None, '}', self.level, KeywordType.NONE)
+        # print("debug general tree insert", '}', self.level)
+        node = GeneralTreeNode(data)
+        self.nodeCount += 1
+        self.parent.addGeneralTreeChildNode(node)
+        self.parent = node.parent
 
-    def complexStringConcatenate(self, input):
-        print("complexStringConcatenate:" + input)
-        stringlen = len(input)
-        index = 0
-        result = ''
-        while (index < stringlen):
-            matchy = self.testreSearch(input[index:], r'\"(.*?)\"', re.DOTALL)
-            if (matchy != None):
-                result = result + matchy.group(1)
-                print("partial result:" + result)
-                index += matchy.end()
-            else:
-                result = result + '\"'
-                break
-        print("complexStringConcatenate final result:" + result)
-        return result
+        self.keyword = None
+        self.argument = None
+        self.stringstart = StringStart.NO
+        self.keywordtype = KeywordType.NONE
+        self.statementstate = StatementState.KEYWORD
 
-    def complexStringCheck(self, input):
-        complex = re.search('"\s+\+\s+"', input)
-        if (complex):
-            lengthComplex = len(input)
-            if ((lengthComplex > 2) and (input[0] != '"') and (input[(lengthComplex - 1)] != '"')):
-                input = '"' + input + '"'
-            print("COMPLEX:", input)
-            return self.complexStringConcatenate(input)
-        else:
-            return input
+    def keywordTextFunc(self, matchy):
+        self.debug.debugPrint("YangParse, keywordYangFunc", matchy.group(1))
+        self.keyword = matchy.group(1)
+        self.keywordtype = KeywordType.TEXT
+        self.statementstate = StatementState.ARGUMENT
 
-    def textFunc(self, node):
-        self.debug.debugPrint("text ")
-        self.yinParse.yinTextSet(node.data[1].group(1), self.complexStringCheck(node.data[1].group(2)))
+    def keywordAllTheRestFunc(self, matchy):
+        self.debug.debugPrint("YangParse, keywordYangFunc", matchy.group(1))
+        self.keyword = matchy.group(1)
+        self.keywordtype = KeywordType.ALLTHEREST
+        self.statementstate = StatementState.ARGUMENT
 
-    def twoParamWithBraceFunc(self, node):
-        self.debug.debugPrint("two params with brace ")
-        self.yinParse.yinTwoParamWithBracePairSet(node.data[1].group(1), self.complexStringCheck(node.data[1].group(2)))
+    def prefixExtensionFunc(self, matchy):
+        self.debug.debugPrint("YangParse, prefixExtensionFunc", matchy.group(0))
+        self.keyword = matchy.group(0)
+        self.keywordtype = KeywordType.ALLTHEREST
+        self.statementstate = StatementState.ARGUMENT
 
-    def oneParamWithBraceFunc(self, node):
-        self.yinParse.yinOneParamWithBracePairSet(node.data[1].group(1))
+    def unquotedStringFunc(self, matchy):
+        self.debug.debugPrint("YangParse, unquotedStringFunc", matchy.group(1))
+        if (self.stringstart == StringStart.NO):
+            self.argument = matchy.group(1)
+            self.stringstart = StringStart.NOQUOTESTART
 
-    def twoParamWithSemicolon(self, node):
-        self.debug.debugPrint("two params with semicolon ")
-        self.yinParse.yinTwoParamsWithSemicolonSet(node.data[1].group(1), self.complexStringCheck(node.data[1].group(2)))
-
-    def testreSearch(self, stringToParse, regExString, flags):
-        self.debug.debugPrint("\nBegin testreSearch string to parse: ", stringToParse, " regular expression: ", regExString)
-        compiledRe = re.compile(regExString, flags)
-        matchy = compiledRe.search(stringToParse)
-        if (matchy):
-            self.debug.debugPrint("Match: regExString " + str(matchy.start()) + str(matchy.end()) + str(matchy.groups()))
-            return matchy
-        else:
-            return None
-
-    def patternComplex(self, node):
-        pattern = node.data[1].group(2)
-        self.debug.debugPrint("patternComplex:" + pattern)
-        stringlen = len(pattern)
-        index = 0
-        result = ''
-        while (index < stringlen):
-            matchy = self.testreSearch(pattern[index:], r'\'(.*?)\'', re.DOTALL)
-            if (matchy != None):
-                result = result + matchy.group(1)
-                self.debug.debugPrint("partial result:" + result)
-                index += matchy.end()
-            else:
-                result = result + '\''
-                break
-        self.debug.debugPrint("patternComplex final result:" + result)
-        self.yinParse.yinTwoParamsWithSemicolonSet('pattern', result)
-
-    def keyFunc(self, node):
-        self.debug.debugPrint("key ")
-        self.yinParse.yinKeySet(node.data[1].group(2))
-
-    def prefixExtensionFunc(self, node):
-        self.debug.debugPrint("prefixExtension ")
-        self.yinParse.yinTwoParamsWithSemicolonSet(node.data[1].group(1)+node.data[1].group(2)+node.data[1].group(3), node.data[1].group(4))
+    def quotedStringFunc(self, matchy):
+        self.debug.debugPrint("YangParse, quotedStringFunc", matchy.group(1))
+        if ((self.stringstart == StringStart.NO) and  (self.argument == None)):
+            self.argument = matchy.group(1)
+            self.stringstart = StringStart.QUOTESTART
+        elif (self.stringstart == StringStart.QUOTESTART):
+            self.argument += matchy.group(1)
 
     def __init__(self, argvtest):
         self.argvtest = argvtest
         self.debug = DebugLog(argvtest.debugFileGet())
         self.yinParse = GeneralTreeToYin(self.debug, argvtest)
 
-        self.yangRegularExpressions = [(r'/\*.*?\*/', re.DOTALL, self.commentFunc, 0),
-                          (r'//.*?\n', 0,  self.commentSingleLineFunc, 0),
-                          (r';', 0, self.yangSemicolonFunc, 0),
-                          (r'({)', 0, self.unhandledReError, 1),
-                          (r'}', 0, self.yangBraceCloseFunc, -1),
-                          (r'(module)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.moduleFunc, 1),
-                          (r'\s+', 0, self.whitespaceFunc, 0),
-                          (r'(namespace)\s+(\".*?\");', 0, self.twoParamWithSemicolon, 0),
-                          (r'(import)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(organization)\s+\"(.*?)\"',  re.DOTALL, self.textFunc, 0),
-                          (r'(contact)\s+\"(.*?)\"',  re.DOTALL, self.textFunc, 0),
-                          (r'(description)\s+\"(.*?)\"',  re.DOTALL, self.textFunc, 0),
-                          (r'(reference)\s+\"(.*?)\"',  re.DOTALL, self.textFunc, 0),
-                          (r'(presence)\s+\"(.*?)\"',  re.DOTALL, self.textFunc, 0),
-                          (r'(status)\s+(current|deprecated|obsolete*);', 0, self.twoParamWithSemicolon, 0),
-                          (r'(range)\s+\"(.*?)\";', 0, self.twoParamWithSemicolon, 0),
-                          (r'(leaf-list)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(choice)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(case)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(enum)\s+(.*?)\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(enum)\s+"(.*?)";',  0, self.twoParamWithSemicolon, 0),
-                          (r'(enum)\s+(.*?);',  0, self.twoParamWithSemicolon, 0),
-                          (r'(notification)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(feature)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(identity)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(container)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(leaf)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(grouping)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(list)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(typedef)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(type)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s*{', 0, self.twoParamWithBraceFunc, 1), # SNMPv2-TC.yang, type string{
-                          (r'(type)\s+([_A-Za-z][._\-A-Za-z0-9]*:[_A-Za-z][._\-A-Za-z0-9]*)\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(type)\s+([_A-Za-z][._\-A-Za-z0-9]*);', 0, self.twoParamWithSemicolon, 0),
-                          (r'(type)\s+([_A-Za-z][._\-A-Za-z0-9]*)\s+;', 0, self.twoParamWithSemicolon, 0),
-                          (r'(type)\s+([_A-Za-z][._\-A-Za-z0-9]*:[_A-Za-z][._\-A-Za-z0-9]*);', 0, self.twoParamWithSemicolon, 0),
-                          (r'(revision)\s+([0-9]{4}-[0-9]{2}-[0-9]{2})\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(revision)\s+\"([0-9]{4}-[0-9]{2}-[0-9]{2})\"\s+{', 0, self.twoParamWithBraceFunc, 1),
-                          (r'(config)\s+(true|false*);', 0, self.twoParamWithSemicolon, 0),
-                          (r'(key)\s+(\".*?\");', re.DOTALL, self.keyFunc, 0),
-                          (r'(key)\s+(.*?);', re.DOTALL, self.keyFunc, 0),
-                          (r'(value)\s+"(\d*)";', 0, self.twoParamWithSemicolon, 0),
-                          (r'(value)\s+(\d*);', 0, self.twoParamWithSemicolon, 0),
-                          (r'(position)\s+(\d*);', 0, self.twoParamWithSemicolon, 0),
-                          (r'(if-feature)\s+(.*?);',  0, self.twoParamWithSemicolon, 0),
-                          (r'(uses)\s+(.*?);',  0, self.twoParamWithSemicolon, 0),
-                          (r'(uses)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(mandatory)\s+(.*?);',  0, self.twoParamWithSemicolon, 0),
-                          (r'(base)\s+(.*?);',  0, self.twoParamWithSemicolon, 0),
-                          (r'(path)\s+(\".*?\");',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(min-elements)\s+(\d*);', 0, self.twoParamWithSemicolon, 0),
-                          (r'(augment)\s+(\".*?\")\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(input)\s+{',  re.DOTALL, self.oneParamWithBraceFunc, 1),
-                          (r'(output)\s+{',  re.DOTALL, self.oneParamWithBraceFunc, 1),
-                          (r'(anyxml)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(bit)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(rpc)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(prefix)\s+\"(.*?)\";', 0, self.twoParamWithSemicolon, 0),
-                          (r'(prefix)\s+(.*?);', 0, self.twoParamWithSemicolon, 0),
-                          (r'(default)\s+(.*?);', 0, self.twoParamWithSemicolon, 0),
-                          (r'(units)\s+(.*?);', 0, self.twoParamWithSemicolon, 0),
-                          (r'(length)\s+\"(.*?)\";', 0, self.twoParamWithSemicolon, 0),
-                          (r'(pattern)\s+\"(.*?)\";', re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(pattern)\s+(\'.*?\');', re.DOTALL, self.patternComplex, 0),
-                          (r'([_A-Za-z][._\-A-Za-z0-9]*)(:)([_A-Za-z][._\-A-Za-z0-9]*)\s+(\".*?\")', 0, self.prefixExtensionFunc, 0),
-                          (r'(action)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(action)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(anydata)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(anydata)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(argument)\s+\"(.*?)\"\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(argument)\s+\"(.*?)\";',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(belongs-to)\s+\"(.*?)\"\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(deviate)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(deviate)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(deviation)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(deviation)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(error-app-tag)\s+\"(.*?)\";',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(submodule)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(error-message)\s+\"(.*?)\";',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(extension)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(fraction-digits)\s+(.*?);',  re.DOTALL, self.textFunc, 0),
-                          (r'(include)\s+(.*?)\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(include)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(max-elements)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(modifier)\s+(invert-match);',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(must)\s+\"(.*?)\"\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(must)\s+\"(.*?)\";',  re.DOTALL, self.textFunc, 0),
-                          (r'(must)\s+\'(.*?)\';',  re.DOTALL, self.textFunc, 0),
-                          (r'(ordered-by)\s+\"(system|user)\";',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(refine)\s+\"(.*?)\"\s+{',  re.DOTALL, self.twoParamWithBraceFunc, 1),
-                          (r'(require-instance)\s+\"(true|false)\";',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(revision-date)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(unique)\s+\"(.*?)\";',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(when)\s+(\".*?\");',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(yang-version)\s+(.*?);',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r'(yin-element)\s+\"(true|false)\";',  re.DOTALL, self.twoParamWithSemicolon, 0),
-                          (r"([_A-Za-z][._\-A-Za-z0-9]*)", 0, self.unhandledReError, 0)
+        self.keyword = None
+        self.argument = None
+        self.stringstart = StringStart.NO
+        self.keywordtype = KeywordType.NONE
+        self.statementstate = StatementState.KEYWORD
+
+        self.yangRegularExpressions = [(r'(/\*.*?\*/)', re.DOTALL, self.commentFunc),
+                          (r'(//.*?\n)', 0,  self.commentFunc),
+                          (r'\s+', 0, self.whitespaceFunc),
+                          (r';', 0, self.semicolonFunc),
+                          (r'{', 0, self.openBraceFunc),
+                          (r'}', 0, self.closeBraceFunc),
+                          (r'(contact|description|fraction-digits|must|organization|presence|reference)', 0, self.keywordTextFunc),
+                          (r'(action|anydata|anyxml|argument|augment|base|belongs-to|bit|case|choice|config|container|default|deviate|deviation|enum|error-app-tag|error-message|extension|feature|grouping|identity|if-feature|import|include|input|key|leaf-list|leaf|length|list|mandatory|max-elements|min-elements|modifier|module|namespace|notification|ordered-by|output|path|pattern|position|prefix|range|refine|require-instance|revision-date|revision|rpc|status|submodule|typedef|type|unique|units|uses|value|when|yang-version|yin-element)', 0, self.keywordAllTheRestFunc),
+                          (r'([_A-Za-z][._\-A-Za-z0-9]*):([_A-Za-z][._\-A-Za-z0-9]*)', 0, self.prefixExtensionFunc),
+                          (r'([^\s\'\";{}]+)', re.DOTALL,  self.unquotedStringFunc), # additional filtering required of comment sequences
+                          (r'\'(.*?)\'', re.DOTALL, self.quotedStringFunc),
+                          (r'\"(.*?)\"', re.DOTALL, self.quotedStringFunc)
                          ]
-        """
-        regular expression issues in yang to yin translation
-
-        rfc6020 shows
-         prefix "acfoo";
-       <prefix value="acfoo"/>
-
-       rfc7223 and a yin translation found on the internet shows
-     prefix if;
-  <prefix value="if"/>
-
-        Two regular expression variations of prefix will be added.
-
-        """
         self.reCompiled = []
         self.reCount = len(self.yangRegularExpressions)
         for index in range(self.reCount):
@@ -247,72 +182,100 @@ class YangParse:
         self.inputfilecontents = self.handleinputfile.read()
         self.handleinputfile.close()
 
-        self.yangimport = YangImport(self.inputfilecontents, argvtest.yangDirsGet())
-        self.levelIndent = "                                                                                                                                                                                                "
-        self.levelIndentLen = len(self.levelIndent)
+        self.yangimport = YangImport(self.debug, self.inputfilecontents, argvtest.yangDirsGet())
         self.root = None
+        self.makeGeneralTree()
 
     def __del__(self):
         self.handleoutputfile.close()
 
-    def levelIndentPrint(self, treeLevel):
-        if (treeLevel < self.levelIndentLen):
-            self.debug.debugPrint(self.levelIndent[0:treeLevel])
+    def makeGeneralTree(self):
+        index = 0
+        stringlen = len(self.inputfilecontents)
+        self.level = 0
+        self.maxlevel = self.level
+        data = "root", None, ';', self.level, KeywordType.NONE
+        self.parent = GeneralTreeNode(data)
+        self.nodeCount = 1
+        self.root = self.parent
+        while (index < stringlen):
+            for regularExpressionIndex in range(self.reCount):
 
-    def printGeneralTree(self):
+                if ((self.statementstate == StatementState.ARGUMENT) and 
+                    ((self.yangRegularExpressions[regularExpressionIndex][2] == self.keywordTextFunc) or
+                     (self.yangRegularExpressions[regularExpressionIndex][2] == self.keywordAllTheRestFunc) or
+                     (self.yangRegularExpressions[regularExpressionIndex][2] == self.prefixExtensionFunc))):
+                    continue
+
+                self.debug.debugPrint("tokenize: regularExpressionIndex", str(regularExpressionIndex), self.yangRegularExpressions[regularExpressionIndex][0])
+                matchy = self.reCompiled[regularExpressionIndex].match(self.inputfilecontents[index:])
+                if (matchy):
+                    endofstring = (index + matchy.end())
+                    if (matchy.end() == 0):
+                        sys.exit(1)
+                    index += matchy.end()
+                    self.yangRegularExpressions[regularExpressionIndex][2](matchy)
+                    break
+                else:
+                    self.debug.debugPrint("tokenize: regular expression didn't match")
+
+            if (matchy == None):
+                self.debug.debugPrint("ERROR: Exit, no regular expression match", self.inputfilecontents[index:])
+                return
+        self.debug.debugPrint("tokenize finished successfully maxlevel", str(self.maxlevel))
+
+    def makeYin(self):
         root = self.root
         breadthList = root.breadthFirstTraversal()
         self.debug.debugPrint('breadthFirstTraversal')
         for node in breadthList:
-            regularExpressionIndex = node.data[0]
-            matchy                 = node.data[1] # regular expression match object, 
-            startOfString          = node.data[2]
-            endOfString            = node.data[3]
-            treeLevel              = node.data[4]
-            if (regularExpressionIndex == 256):
+            keyword      = node.data[0]
+            argument     = node.data[1]
+            statementEnd = node.data[2]
+            treeLevel    = node.data[3]
+            keywordType  = node.data[4]
+
+            if (keyword == 'root'):
                 self.debug.debugPrint("root node")
-            else:
-                self.levelIndentPrint(treeLevel)
-                self.yangRegularExpressions[regularExpressionIndex][2](node)
-                self.debug.debugPrint(" match object info start ", str(matchy.start()), " end ",  str(matchy.end()), " ", str(matchy.groups()))
-                self.debug.debugPrint( " tree level ", str(treeLevel),  " file index start ", str(startOfString), " end ", str(endOfString))
-                self.debug.debugPrint(" ", self.inputfilecontents[startOfString:endOfString])
-            self.debug.debugPrint("")
+            elif ((statementEnd == ';') and (keyword != None) and (argument != None) and (keywordType == KeywordType.TEXT)):
+                self.yinParse.yinTextSet(keyword, argument)
+            elif ((statementEnd == ';') and (keyword != None) and (argument != None) and (keywordType == KeywordType.ALLTHEREST)):
+                self.yinParse.yinTwoParamsWithSemicolonSet(keyword, argument)
+            elif ((statementEnd == '{') and (keyword != None) and (argument != None) and (keyword == "module") and self.argvtest.t14Get()):
+                self.yinParse.yinModuleSet(self.yangimport.getYinModuleStringWithImports())
+            elif ((statementEnd == '{') and (keyword != None) and (argument != None)):
+                self.yinParse.yinTwoParamWithBracePairSet(keyword, argument)
+            elif ((statementEnd == '{') and (keyword != None) and (argument == None)):
+                self.yinParse.yinOneParamWithBracePairSet(keyword)
+            elif (statementEnd == '}'):
+                self.yinParse.yinCloseBraceSet()
+
         yinFile = self.yinParse.yinStringGet()
         self.debug.debugPrint("yinStringGet for file write attempt ", yinFile) 
         if (yinFile != None):
-            self.handleoutputfile.write(self.yinParse.yinStringGet())
+            self.debug.debugPrint("YangParse, tokenize, About to write yin file.", yinFile)
+            self.handleoutputfile.write(yinFile)
+            self.handleoutputfile.flush() # mysterious fix for problem seen only in patterntest.yang test, where nothing was written to the yin file.
 
-    def tokenize(self):
-        index = 0
-        stringlen = len(self.inputfilecontents)
-        level = 1
-        data = 256, None, 0, 0, level
-        parent = GeneralTreeNode(data)
-        nodeCount = 1
-        self.root = parent
-        level = 2
-        maxlevel = level
-        while (index < stringlen):
-            for regularExpressionIndex in range(self.reCount):
-                matchy = self.reCompiled[regularExpressionIndex].match(self.inputfilecontents[index:])
-                if (matchy):
-                    endofstring = (index + matchy.end())
-                    data = (regularExpressionIndex, matchy, index, endofstring, level)
-                    node = GeneralTreeNode(data)
-                    nodeCount = nodeCount + 1
-                    parent.addGeneralTreeChildNode(node)
-                    if (self.yangRegularExpressions[regularExpressionIndex][3] == 1):
-                        level = level + 1
-                        if (level > maxlevel):
-                          maxlevel = level
-                        parent = node
-                    elif (self.yangRegularExpressions[regularExpressionIndex][3]  == -1):
-                        level = level - 1
-                        parent = node.parent
-                    index += matchy.end()
-                    break
-            if (matchy == None):
-                self.debug.debugPrint("ERROR: Exit, no regular expression match", self.inputfilecontents[index:])
-                return
-        self.debug.debugPrint("tokenize finished successfully maxlevel", str(maxlevel), str(nodeCount))
+    def makeTreeOutputFormat(self):
+        root = self.root
+        breadthList = root.breadthFirstTraversal()
+        self.debug.debugPrint('breadthFirstTraversal')
+        indent = LevelIndent(1, self.debug)
+
+        for node in breadthList:
+            keyword      = node.data[0]
+            argument     = node.data[1]
+            statementEnd = node.data[2]
+            treeLevel    = node.data[3]
+            keywordType  = node.data[4]
+            indent.setLevel(treeLevel)
+            # print("debug general tree walk", keyword, argument, statementEnd, treeLevel, keywordType)
+            if (keyword == 'root'):
+                self.debug.debugPrint("root node")
+            elif (keyword != None) and (argument != None):
+                print(indent.indent() + keyword, argument, statementEnd)
+            elif (keyword != None):
+                print(indent.indent() + keyword, statementEnd)
+            else:
+                print(indent.indent() + statementEnd)

@@ -145,6 +145,8 @@ class GeneralTreeToYin:
     def yinTwoParamsWithSemicolonSet(self, param1, param2):
         self.debug.debugPrint("yinTwoParamsWithSemicolonSet")
         inner = self.tagpairs.getInnerTag(param1)
+        if (param1 == "key"):
+             param2 = re.sub('\n', ' ', param2)
         self.yinStringAppend('<' + param1 + ' ' + inner + '=' + self.addQuote(param2) + '/>\n')
 
     def yinTextSet(self, type, description):
