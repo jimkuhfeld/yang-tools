@@ -5,7 +5,7 @@ from LevelIndent import LevelIndent
 from TagPairs import TagPairs
 import re
 
-class GeneralTreeToYin:
+class YinOutput:
 
     def __init__(self, debug, argvtest):
         self.debug = debug
@@ -97,11 +97,8 @@ class GeneralTreeToYin:
 
     def yinStackPush(self, closeString):
         self.lifo.append(closeString)
-        if (closeString == '</module>'):
-            self.level.setLevel(0)
-        else:
-            self.level.incrementLevel()
-        self.debug.debugPrint("yinStackPush ", closeString, "length of self.lifo is ", str(len(self.lifo)))
+        self.level.incrementLevel()
+        self.debug.debugPrint("yinStackPush ", closeString, "length of self.lifo is ", str(len(self.lifo)), str(self.level.getLevel()))
 
     def yinStateSet(self, newState):
         self.debug.debugPrint("yinStateSet")
@@ -276,8 +273,8 @@ class GeneralTreeToYin:
          if (len(self.lifo) != 0):
              closeBraceString = self.lifo.pop()
              self.debug.debugPrint("yinCloseBraceSet ", closeBraceString)
-             self.yinStringAppend(closeBraceString + '\n')
              self.level.decrementLevel()
+             self.yinStringAppend(closeBraceString + '\n')
              self.debug.debugPrint("Yin Output\n", self.yinStringGet())
 
     def yinKeySet(self, keyName):

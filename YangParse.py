@@ -3,7 +3,7 @@ import io
 import re
 
 from GeneralTreeNode import GeneralTreeNode
-from GeneralTreeToYin import GeneralTreeToYin
+from YinOutput import YinOutput
 from DebugLog import DebugLog
 from LevelIndent import LevelIndent
 from ArgcArgvProcess import ArgcArgvProcess
@@ -145,7 +145,7 @@ class YangParse:
     def __init__(self, argvtest):
         self.argvtest = argvtest
         self.debug = DebugLog(argvtest.debugFileGet())
-        self.yinParse = GeneralTreeToYin(self.debug, argvtest)
+        self.yinParse = YinOutput(self.debug, argvtest)
 
         self.keyword = None
         self.argument = None

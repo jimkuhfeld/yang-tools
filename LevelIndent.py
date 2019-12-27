@@ -24,6 +24,9 @@ class LevelIndent:
         self.level = level
         self.debug.debugPrint("debugSetLevel ", str(self.level))
 
+    def getLevel(self):
+        return self.level
+
     def indent(self):
         if (self.level <= self.levelIndentLen):
             return self.levelIndent[0:self.level]
